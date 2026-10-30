@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -e
+
+PROXY_HTTP="http://127.0.0.1:10809"
+PROXY_SOCKS="socks5h://127.0.0.1:10808"
+NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com,::1"
+
+case "$1" in
+    on|enable)
+        # 1. GSettings (GNOME / GTK / Chromium / Electron)
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.system.proxy mode 'manual'
+            gsettings set org.gnome.system.proxy.http host '127.0.0.1'
+            gsettings set org.gnome.system.proxy.http port 10809
+            gsettings set org.gnome.system.proxy.https host '127.0.0.1'
+            gsettings set org.gnome.system.proxy.https port 10809
+            gsettings set org.gnome.system.proxy.socks host '127.0.0.1'
+            gsettings set org.gnome.system.proxy.socks port 10808
+        fi
+
+        # 2. Динамическое обновление systemd user сессии
+        systemctl --user set-environment \
+            http_proxy="$PROXY_HTTP" \
+            https_proxy="$PROXY_HTTP" \
+            all_proxy="$PROXY_SOCKS" \
+            HTTP_PROXY="$PROXY_HTTP" \
+            HTTPS_PROXY="$PROXY_HTTP" \
+            ALL_PROXY="$PROXY_SOCKS" \
+            no_proxy="$NO_PROXY" \
+            NO_PROXY="$NO_PROXY" 2>/dev/null || true
+
+        rm -f "$HOME/.config/environment.d/99-proxy.conf"
+
+        echo "✅ Системный прокси включен (GSettings manual + systemd):"
+        echo "   HTTP:  $PROXY_HTTP"
+        echo "   SOCKS: $PROXY_SOCKS"
+        ;;
+
+    off|disable)
+        # 1. GSettings -> прямое соединение
+        if command -v gsettings >/dev/null 2>&1; then
+            gsettings set org.gnome.system.proxy mode 'none'
+        fi
+
+        # 2. Очистка переменных в systemd user сессии
+        systemctl --user set-environment \
+            http_proxy="" \
+            https_proxy="" \
+            all_proxy="" \
+            HTTP_PROXY="" \
+            HTTPS_PROXY="" \
+            ALL_PROXY="" \
+            no_proxy="" \
+            NO_PROXY="" 2>/dev/null || true
+
+        rm -f "$HOME/.config/environment.d/99-proxy.conf"
+        echo "🛑 Системный прокси отключен (прямое подключение к интернету)."
+        ;;
+
+    status)
+        MODE="none"
+        if command -v gsettings >/dev/null 2>&1; then
+            MODE=$(gsettings get org.gnome.system.proxy mode 2>/dev/null || echo "none")
+        fi
+        echo "GSettings режим: $MODE"
+        ;;
+
+    *)
+        echo "Использование: $0 {on|off|status}"
+        exit 1
+        ;;
+esac

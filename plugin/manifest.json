@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "bobol.zapret",
+  "name": "Zapret",
+  "version": "1.0.0",
+  "author": "bobol",
+  "description": "Toggle proxy on/off and switch servers & DNS",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Zapret.qml"
+  },
+  "barWidget": {
+    "displayName": "Zapret",
+    "description": "Toggle proxy on/off and switch servers & DNS",
+    "category": "Utilities",
+    "allowMultiple": false
+  }
+}

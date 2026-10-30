@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Toggle proxy on/off for omarchy bar widget
+
+find_dir() {
+    if [ -n "$PROXY_DIR" ] && [ -d "$PROXY_DIR" ]; then echo "$PROXY_DIR"; return; fi
+    if [ -d "$HOME/Projects/omarchy-vless-proxy" ]; then echo "$HOME/Projects/omarchy-vless-proxy"; return; fi
+    if [ -d "$HOME/Projects/amnezia-configs" ]; then echo "$HOME/Projects/amnezia-configs"; return; fi
+    if [ -d "$HOME/.config/vless-proxy" ]; then echo "$HOME/.config/vless-proxy"; return; fi
+    echo "$HOME/Projects/omarchy-vless-proxy"
+}
+
+DIR="$(find_dir)"
+CORE_DIR="$DIR/core"
+[ -d "$CORE_DIR" ] || CORE_DIR="$DIR"
+
+LOG="$HOME/.local/state/omarchy/zapret.log"
+mkdir -p "$(dirname "$LOG")"
+
+TS() { date '+%F %T.%3N'; }
+
+if "$CORE_DIR/proxy.sh" status | grep -q "🟢"; then
+    echo "$(TS) toggle: STOPPING proxy" >> "$LOG"
+    "$CORE_DIR/sysproxy.sh" off >> "$LOG" 2>&1 || true
+    "$CORE_DIR/proxy.sh" stop >> "$LOG" 2>&1
+else
+    echo "$(TS) toggle: STARTING proxy" >> "$LOG"
+    "$CORE_DIR/proxy.sh" start >> "$LOG" 2>&1
+    "$CORE_DIR/sysproxy.sh" on >> "$LOG" 2>&1
+fi

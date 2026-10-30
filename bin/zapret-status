@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+find_dir() {
+    if [ -n "$PROXY_DIR" ] && [ -d "$PROXY_DIR" ]; then echo "$PROXY_DIR"; return; fi
+    if [ -d "$HOME/Projects/omarchy-vless-proxy" ]; then echo "$HOME/Projects/omarchy-vless-proxy"; return; fi
+    if [ -d "$HOME/Projects/amnezia-configs" ]; then echo "$HOME/Projects/amnezia-configs"; return; fi
+    if [ -d "$HOME/.config/vless-proxy" ]; then echo "$HOME/.config/vless-proxy"; return; fi
+    echo "$HOME/Projects/omarchy-vless-proxy"
+}
+
+DIR="$(find_dir)"
+CORE_DIR="$DIR/core"
+[ -d "$CORE_DIR" ] || CORE_DIR="$DIR"
+
+INFO=$(python3 "$CORE_DIR/manager.py" status 2>/dev/null || echo '{"running":false}')
+RUNNING=$(echo "$INFO" | grep -oP '"running":\s*\K[a-z]+' || echo "false")
+SNAME=$(echo "$INFO" | grep -oP '"server_name":\s*"\K[^"]+' || echo "Server")
+DNAME=$(echo "$INFO" | grep -oP '"dns_name":\s*"\K[^"]+' || echo "DNS")
+
+if [ "$RUNNING" = "true" ]; then
+    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy ($SNAME | $DNAME): Включен\nЛКМ: выключить, ПКМ: настройки\",\"class\":\"active\",\"alt\":\"on\"}"
+else
+    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy: Выключен ($SNAME)\nЛКМ: включить, ПКМ: настройки\",\"class\":\"inactive\",\"alt\":\"off\"}"
+fi

@@ -1,0 +1,22 @@
+# Private configs and credentials
+keys.txt
+subscription.txt
+settings.json
+active_config.json
+servers.json
+configs/*.json
+!configs/example.json
+
+# Binaries and logs
+bin/xray
+bin/xray.zip
+xray.log
+xray.pid
+
+# Python & caches
+__pycache__/
+*.pyc
+
+# Local OS files
+.DS_Store
+*.swp
