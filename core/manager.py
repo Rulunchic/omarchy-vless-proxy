@@ -13,6 +13,15 @@ SETTINGS_FILE = os.path.join(DIR, "settings.json")
 ACTIVE_CONFIG = os.path.join(DIR, "active_config.json")
 PROXY_SCRIPT = os.path.join(CORE_DIR, "proxy.sh")
 
+# Ensure core is in python path
+if CORE_DIR not in sys.path:
+    sys.path.insert(0, CORE_DIR)
+
+try:
+    from subscription import update_from_subscription, get_hwid
+except ImportError:
+    from core.subscription import update_from_subscription, get_hwid
+
 # DNS Profiles
 DNS_PROVIDERS = [
     ("system", "Системный / Серверный (По умолчанию — самый быстрый)", {
@@ -67,17 +76,26 @@ def load_settings():
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                if not data.get("hwid"):
+                    data["hwid"] = get_hwid(DIR)
+                return data
         except Exception:
             pass
     servers = load_servers()
     def_server = servers[0][0] if servers else "default"
     # Prefer Finland or European if present
     for sid, name, _ in servers:
-        if "finland" in sid.lower() or "финляндия" in name.lower():
+        if "finland" in sid.lower() or "финляндия" in name.lower() or "основной" in name.lower():
             def_server = sid
             break
-    return {"server": def_server, "dns": "system"}
+    data = {
+        "server": def_server,
+        "dns": "system",
+        "hwid": get_hwid(DIR),
+        "subscription_url": ""
+    }
+    return data
 
 def save_settings(settings):
     with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
@@ -110,6 +128,14 @@ def build_active_config(server_id=None, dns_id=None):
     if not os.path.exists(server_cfg_path):
         # Check root DIR as fallback
         server_cfg_path = os.path.join(DIR, sfile)
+
+    if not os.path.exists(server_cfg_path):
+        # Fall back to first available server config
+        all_srv = load_servers()
+        if all_srv:
+            sid, sname, sfile = all_srv[0]
+            server_cfg_path = os.path.join(CONFIGS_DIR, sfile)
+            settings["server"] = sid
 
     if not os.path.exists(server_cfg_path):
         raise FileNotFoundError(f"Config file not found: {server_cfg_path}")
@@ -200,6 +226,16 @@ def apply_and_restart(server_id, dns_id):
     notify_body = f"Сервер: {sname}\nDNS: {dname}{status_str}"
     subprocess.run(["notify-send", "-a", "Proxy Manager", notify_title, notify_body], check=False)
 
+def apply_subscription_url(url):
+    hwid = get_hwid(DIR)
+    srvs = update_from_subscription(url, DIR, hwid=hwid)
+    settings = load_settings()
+    settings["subscription_url"] = url
+    settings["server"] = srvs[0]["id"]
+    save_settings(settings)
+    apply_and_restart(srvs[0]["id"], settings.get("dns", "system"))
+    return srvs
+
 def open_zenity_dialog():
     settings = load_settings()
     servers = load_servers()
@@ -217,12 +253,13 @@ def open_zenity_dialog():
         "zenity",
         "--forms",
         "--title=Настройки Прокси",
-        "--text=Выберите сервер и DNS-сервер:",
+        "--text=Выберите сервер и DNS или вставьте ссылку на подписку:",
         "--separator=|",
         "--add-combo=Сервер",
         f"--combo-values={'|'.join(server_names_ordered)}",
         "--add-combo=DNS-сервер",
-        f"--combo-values={'|'.join(dns_names_ordered)}"
+        f"--combo-values={'|'.join(dns_names_ordered)}",
+        "--add-entry=🔗 Новая ссылка на подписку"
     ]
 
     try:
@@ -235,6 +272,23 @@ def open_zenity_dialog():
         parts = out.split("|")
         selected_server_name = parts[0] if len(parts) > 0 else ""
         selected_dns_name = parts[1] if len(parts) > 1 else ""
+        new_sub_url = parts[2].strip() if len(parts) > 2 else ""
+
+        if new_sub_url:
+            try:
+                srvs = apply_subscription_url(new_sub_url)
+                subprocess.run([
+                    "notify-send", "-a", "Proxy Manager",
+                    "✅ Подписка успешно обновлена!",
+                    f"Загружено {len(srvs)} серверов.\nПодключен: {srvs[0]['name']}"
+                ], check=False)
+                return
+            except Exception as e:
+                subprocess.run([
+                    "zenity", "--error",
+                    f"--text=Ошибка при обновлении подписки:\n{e}"
+                ], check=False)
+                return
 
         target_server = cur_server
         for sid, name, _ in servers:
@@ -256,7 +310,7 @@ def open_zenity_dialog():
 def open_tkinter_dialog():
     try:
         import tkinter as tk
-        from tkinter import ttk
+        from tkinter import ttk, messagebox
 
         settings = load_settings()
         servers = load_servers()
@@ -265,7 +319,7 @@ def open_tkinter_dialog():
 
         root = tk.Tk()
         root.title("Настройки Прокси")
-        root.geometry("440x240")
+        root.geometry("480x300")
         root.resizable(False, False)
 
         tk.Label(root, text="Настройки прокси", font=("sans-serif", 13, "bold")).pack(pady=10)
@@ -290,6 +344,29 @@ def open_tkinter_dialog():
             if did == cur_dns:
                 dns_combo.set(name)
         dns_combo.grid(row=1, column=1, pady=5)
+
+        tk.Label(frame, text="Подписка (URL):", anchor="w").grid(row=2, column=0, sticky="w", pady=5)
+        sub_var = tk.StringVar(value=settings.get("subscription_url", ""))
+        sub_entry = tk.Entry(frame, textvariable=sub_var, width=37)
+        sub_entry.grid(row=2, column=1, pady=5)
+
+        def on_update_sub():
+            url = sub_var.get().strip()
+            if not url:
+                messagebox.showwarning("Внимание", "Введите URL подписки")
+                return
+            try:
+                srvs = apply_subscription_url(url)
+                # Refresh server combo
+                servers_new = load_servers()
+                server_combo['values'] = [n for _, n, _ in servers_new]
+                server_combo.set(srvs[0]["name"])
+                messagebox.showinfo("Успех", f"Загружено {len(srvs)} серверов!\nАктивный: {srvs[0]['name']}")
+            except Exception as err:
+                messagebox.showerror("Ошибка", f"Не удалось загрузить подписку:\n{err}")
+
+        btn_sub = tk.Button(frame, text="Загрузить подписку", command=on_update_sub, bg="#2196f3", fg="white")
+        btn_sub.grid(row=3, column=1, sticky="e", pady=3)
 
         def on_save():
             s_name = server_var.get()
@@ -336,11 +413,44 @@ if __name__ == "__main__":
                 "server_name": sname,
                 "dns_id": did,
                 "dns_name": dname,
+                "subscription_url": st.get("subscription_url", ""),
                 "running": is_proxy_running()
             }, ensure_ascii=False))
         elif cmd == "set":
             s = sys.argv[2] if len(sys.argv) > 2 else None
             d = sys.argv[3] if len(sys.argv) > 3 else "system"
             apply_and_restart(s, d)
+        elif cmd == "sub":
+            if len(sys.argv) > 2:
+                url = sys.argv[2]
+                srvs = apply_subscription_url(url)
+                print(f"✅ Успешно импортировано {len(srvs)} серверов:")
+                for s in srvs:
+                    print(f" - [{s['id']}] {s['name']} ({s['host']})")
+            else:
+                st = load_settings()
+                url = st.get("subscription_url")
+                if not url:
+                    print("❌ URL подписки не сохранен. Используйте: manager.py sub <URL>")
+                    sys.exit(1)
+                srvs = apply_subscription_url(url)
+                print(f"✅ Подписка обновлена ({len(srvs)} серверов):")
+                for s in srvs:
+                    print(f" - [{s['id']}] {s['name']} ({s['host']})")
+        elif cmd == "sub-update":
+            st = load_settings()
+            url = st.get("subscription_url")
+            if not url:
+                print("❌ URL подписки не сохранен. Используйте: manager.py sub <URL>")
+                sys.exit(1)
+            srvs = apply_subscription_url(url)
+            print(f"✅ Подписка обновлена ({len(srvs)} серверов):")
+            for s in srvs:
+                print(f" - [{s['id']}] {s['name']} ({s['host']})")
+        elif cmd == "list":
+            servers = load_servers()
+            print("Доступные серверы:")
+            for sid, name, fn in servers:
+                print(f" - {sid}: {name}")
     else:
         open_zenity_dialog()

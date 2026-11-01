@@ -11,7 +11,7 @@ PID_FILE="$DIR/xray.pid"
 LOG_FILE="$DIR/xray.log"
 
 usage() {
-    echo "Использование: $0 {start [сервер]|stop|restart [сервер]|status|test [сервер]|list|settings}"
+    echo "Использование: $0 {start [сервер]|stop|restart [сервер]|status|test [сервер]|sub [URL]|list|settings}"
     exit 1
 }
 
@@ -72,6 +72,19 @@ case "$1" in
 
     settings)
         python3 "$DIR/core/manager.py" gui
+        ;;
+
+    sub)
+        if [ -n "$2" ]; then
+            python3 "$DIR/core/manager.py" sub "$2"
+        else
+            python3 "$DIR/core/manager.py" sub-update
+        fi
+        if is_running; then
+            echo "🔄 Перезапуск прокси..."
+            $0 restart >/dev/null
+            echo "✅ Прокси перезапущен с новыми серверами."
+        fi
         ;;
 
     stop)
