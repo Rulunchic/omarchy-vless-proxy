@@ -290,7 +290,7 @@ def update_from_subscription(url_or_text, base_dir, hwid=None):
             else:
                 continue
 
-            if "App not supported" in sname or "Limit of devices" in sname or shost == "0.0.0.0":
+            if "App not supported" in sname or "Limit of devices" in sname or "Продлите" in sname or "продлите" in sname or shost == "0.0.0.0":
                 continue
 
             sid = sanitize_server_id(sname, shost, idx)
