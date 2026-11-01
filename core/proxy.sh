@@ -36,6 +36,24 @@ case "$1" in
             exit 1
         fi
 
+        # Check for AmneziaVPN conflict
+        if ip link show dev amn0 >/dev/null 2>&1; then
+            echo "⚠️ Внимание: Обнаружен активный интерфейс AmneziaVPN (amn0)."
+            echo "   При включенной Amnezia пакеты VLESS Reality могут фрагментироваться (MTU 1280 vs 1500)."
+            echo "   Если интернет не работает через прокси, сначала отключите AmneziaVPN."
+        fi
+
+        # Check for port occupation
+        for PORT in 10808 10809; do
+            OCCUPIED_PID=$(lsof -ti :$PORT 2>/dev/null || ss -lptn "sport = :$PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -n 1 || true)
+            if [ -n "$OCCUPIED_PID" ]; then
+                PNAME=$(ps -p "$OCCUPIED_PID" -o comm= 2>/dev/null || echo "unknown")
+                if [ "$PNAME" != "xray" ]; then
+                    echo "⚠️ Предупреждение: Порт $PORT занят процессом $PNAME (PID $OCCUPIED_PID)!"
+                fi
+            fi
+        done
+
         if [ ! -x "$BIN" ]; then
             echo "❌ Ошибка: бинарный файл Xray не найден по пути $BIN"
             echo "Установите xray ('sudo pacman -S xray') или запустите python3 setup.py"

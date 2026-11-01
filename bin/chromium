@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Chromium wrapper for Hyprland / Wayland to support GNOME GSettings proxy toggles
+export XDG_CURRENT_DESKTOP=GNOME
+TARGET=$(which -a chromium 2>/dev/null | grep -v "$0" | head -n 1)
+[ -z "$TARGET" ] && TARGET="/usr/bin/chromium"
+exec "$TARGET" "$@"

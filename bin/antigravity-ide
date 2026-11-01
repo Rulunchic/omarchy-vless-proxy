@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Auto-route Antigravity IDE through local proxy when proxy is running
+export XDG_CURRENT_DESKTOP=GNOME
+if (exec 3<>/dev/tcp/127.0.0.1/10809) 2>/dev/null; then
+    exec 3>&-
+    export http_proxy="http://127.0.0.1:10809"
+    export https_proxy="http://127.0.0.1:10809"
+    export all_proxy="socks5h://127.0.0.1:10808"
+    export HTTP_PROXY="http://127.0.0.1:10809"
+    export HTTPS_PROXY="http://127.0.0.1:10809"
+    export ALL_PROXY="socks5h://127.0.0.1:10808"
+fi
+for candidate in "$HOME/.local/opt/antigravity-ide/bin/antigravity-ide" "$HOME/.local/opt/antigravity-ide/antigravity-ide" "/opt/antigravity-ide/bin/antigravity-ide"; do
+    if [ -x "$candidate" ]; then
+        exec "$candidate" "$@"
+    fi
+done
+TARGET=$(which -a antigravity-ide 2>/dev/null | grep -v "$0" | head -n 1)
+[ -n "$TARGET" ] && exec "$TARGET" "$@"

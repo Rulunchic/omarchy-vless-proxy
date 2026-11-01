@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Auto-route t3 CLI through local proxy when proxy is running
+if (exec 3<>/dev/tcp/127.0.0.1/10809) 2>/dev/null; then
+    exec 3>&-
+    export http_proxy="http://127.0.0.1:10809"
+    export https_proxy="http://127.0.0.1:10809"
+    export all_proxy="socks5h://127.0.0.1:10808"
+    export HTTP_PROXY="http://127.0.0.1:10809"
+    export HTTPS_PROXY="http://127.0.0.1:10809"
+    export ALL_PROXY="socks5h://127.0.0.1:10808"
+fi
+TARGET=$(which -a t3 2>/dev/null | grep -v "$0" | head -n 1)
+[ -z "$TARGET" ] && TARGET="/usr/bin/t3"
+exec "$TARGET" "$@"
