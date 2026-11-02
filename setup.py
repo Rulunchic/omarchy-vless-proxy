@@ -69,6 +69,42 @@ def ensure_xray_binary():
     log("Xray успешно установлен в bin/xray", "✅")
     return xray_bin
 
+GEOIP_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+GEOSITE_URL = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+
+def ensure_geo_assets():
+    """Ensure geoip.dat and geosite.dat are present for Russian services split-tunneling."""
+    geoip_dst = os.path.join(BIN_DIR, "geoip.dat")
+    geosite_dst = os.path.join(BIN_DIR, "geosite.dat")
+
+    local_candidates = [
+        os.path.expanduser("~/.local/share/incy/geo_current"),
+        "/opt/AmneziaVPN/bin",
+        os.path.expanduser("~/Projects/amnezia-configs/bin"),
+        "/usr/share/xray",
+        "/var/tmp/incy-xray/geo"
+    ]
+
+    for asset, dst, url in [("geoip.dat", geoip_dst, GEOIP_URL), ("geosite.dat", geosite_dst, GEOSITE_URL)]:
+        if os.path.exists(dst) and os.path.getsize(dst) > 1000000:
+            continue
+        found = False
+        for c in local_candidates:
+            src = os.path.join(c, asset)
+            if os.path.exists(src) and os.path.getsize(src) > 1000000:
+                shutil.copy2(src, dst)
+                log(f"Скопирован {asset} из локального кэша ({c})", "✅")
+                found = True
+                break
+        if not found:
+            log(f"Загрузка базы маршрутизации {asset}...", "⬇️")
+            try:
+                import urllib.request
+                urllib.request.urlretrieve(url, dst)
+                log(f"{asset} успешно загружен", "✅")
+            except Exception as e:
+                log(f"Предупреждение: не удалось скачать {asset}: {e}", "⚠️")
+
 def install_system_components():
     """Install bin wrappers, Omarchy plugin, application wrappers, and shell configs."""
     home = os.path.expanduser("~")
@@ -315,6 +351,7 @@ def main():
         log(f" - [{s['id']}] {s['name']} ({s['host']})")
 
     ensure_xray_binary()
+    ensure_geo_assets()
     install_system_components()
 
     # Determine default server (prefer Sweden, Finland, or European)

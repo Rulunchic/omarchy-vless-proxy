@@ -3,7 +3,8 @@ set -e
 
 PROXY_HTTP="http://127.0.0.1:10809"
 PROXY_SOCKS="socks5h://127.0.0.1:10808"
-NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com,::1"
+NO_PROXY="localhost,127.0.0.1,localaddress,.localdomain.com,::1,*.ru,*.su,*.рф,*.xn--p1ai,vk.com,*.vk.com,max.ru,*.max.ru,ya.ru,*.ya.ru,yandex.ru,*.yandex.ru,habr.com,*.habr.com,2gis.com,*.2gis.com,ozon.ru,*.ozon.ru,wildberries.ru,*.wildberries.ru,avito.ru,*.avito.ru,gosuslugi.ru,*.gosuslugi.ru"
+IGNORE_HOSTS="['localhost', '127.0.0.0/8', '::1', '*.ru', '*.su', '*.xn--p1ai', '*.рф', 'vk.com', '*.vk.com', 'max.ru', '*.max.ru', 'ya.ru', '*.ya.ru', 'yandex.ru', '*.yandex.ru', 'habr.com', '*.habr.com', '2gis.com', '*.2gis.com', 'gosuslugi.ru', '*.gosuslugi.ru', 'ozon.ru', '*.ozon.ru', 'wildberries.ru', '*.wildberries.ru', 'avito.ru', '*.avito.ru']"
 
 case "$1" in
     on|enable)
@@ -16,6 +17,7 @@ case "$1" in
             gsettings set org.gnome.system.proxy.https port 10809
             gsettings set org.gnome.system.proxy.socks host '127.0.0.1'
             gsettings set org.gnome.system.proxy.socks port 10808
+            gsettings set org.gnome.system.proxy ignore-hosts "$IGNORE_HOSTS"
         fi
 
         # 2. Динамическое обновление systemd user сессии
@@ -37,6 +39,7 @@ case "$1" in
             cat <<EOF > "$LW_KEYFILE"
 [system/proxy]
 mode='manual'
+ignore-hosts=$IGNORE_HOSTS
 
 [system/proxy/http]
 host='127.0.0.1'

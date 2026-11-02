@@ -10,6 +10,8 @@ configs/*.json
 # Binaries and logs
 bin/xray
 bin/xray.zip
+bin/*.dat
+bin/*.tmp
 xray.log
 xray.pid
 

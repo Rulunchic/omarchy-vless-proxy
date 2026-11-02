@@ -157,7 +157,8 @@ def build_active_config(server_id=None, dns_id=None):
             "tag": "http",
             "listen": "127.0.0.1",
             "port": 10809,
-            "protocol": "http"
+            "protocol": "http",
+            "sniffing": {"enabled": True, "destOverride": ["http", "tls"]}
         }
     ]
 
@@ -179,26 +180,74 @@ def build_active_config(server_id=None, dns_id=None):
         if dinfo.get("hosts"):
             dns_block["hosts"] = dinfo["hosts"]
         cfg["dns"] = dns_block
-
-        rules = []
-        if dinfo.get("direct_ips"):
-            rules.append({
-                "type": "field",
-                "ip": dinfo["direct_ips"],
-                "outboundTag": "direct"
-            })
-        rules.append({
-            "type": "field",
-            "inboundTag": ["socks", "http"],
-            "outboundTag": "proxy"
-        })
-        cfg["routing"] = {
-            "domainStrategy": "IPIfNonMatch",
-            "rules": rules
-        }
     else:
         cfg.pop("dns", None)
-        cfg.pop("routing", None)
+
+    # Intelligent split-tunneling routing rules (Russian services & IPs bypass proxy)
+    rules = []
+
+    # 1. DNS provider bootstrap direct IPs (if any)
+    if dinfo and dinfo.get("direct_ips"):
+        rules.append({
+            "type": "field",
+            "ip": dinfo["direct_ips"],
+            "outboundTag": "direct"
+        })
+
+    # 2. Russian Domains & Key Services bypass
+    rules.append({
+        "type": "field",
+        "domain": [
+            "geosite:category-ru",
+            "domain:ru",
+            "domain:su",
+            "domain:xn--p1ai",
+            "domain:xn--c1avg",
+            "domain:max.ru",
+            "domain:vk.com",
+            "domain:vk.me",
+            "domain:userapi.com",
+            "domain:vk-cdn.net",
+            "domain:yandex.net",
+            "domain:ya.ru",
+            "domain:kinopoisk.ru",
+            "domain:habr.com",
+            "domain:2gis.com",
+            "domain:2gis.ru",
+            "domain:wbstatic.net",
+            "domain:ozoncontent.ru",
+            "domain:avito.st",
+            "domain:gu-st.ru",
+            "domain:nspk.ru",
+            "domain:mir-connect.ru",
+            "domain:sbp.nspk.ru",
+            "domain:gosuslugi.ru",
+            "domain:esia.gosuslugi.ru"
+        ],
+        "outboundTag": "direct"
+    })
+
+    # 3. Russian IP ranges & LAN bypass
+    rules.append({
+        "type": "field",
+        "ip": [
+            "geoip:ru",
+            "geoip:private"
+        ],
+        "outboundTag": "direct"
+    })
+
+    # 4. Fallback: route all other traffic through proxy
+    rules.append({
+        "type": "field",
+        "inboundTag": ["socks", "http"],
+        "outboundTag": "proxy"
+    })
+
+    cfg["routing"] = {
+        "domainStrategy": "IPIfNonMatch",
+        "rules": rules
+    }
 
     with open(ACTIVE_CONFIG, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
