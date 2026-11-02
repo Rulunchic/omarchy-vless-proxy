@@ -157,11 +157,8 @@ def check_auto_rotation() -> Tuple[bool, Optional[str]]:
         except Exception:
             should_renew = True
 
-    if should_renew:
-        changed, new_url, exp = sync_hub_subscription(force_renew=True)
-        return changed, new_url
-
-    return False, settings.get("subscription_url")
+    changed, new_url, exp = sync_hub_subscription(force_renew=should_renew)
+    return changed, new_url
 
 
 if __name__ == "__main__":

@@ -12,6 +12,14 @@ DIR="$(find_dir)"
 CORE_DIR="$DIR/core"
 [ -d "$CORE_DIR" ] || CORE_DIR="$DIR"
 
+# Periodic background hub sync check (every 30s)
+NOW=$(date +%s)
+LAST_CHECK=$(cat /tmp/omarchy_last_hub_check 2>/dev/null || echo 0)
+if [ $(( NOW - LAST_CHECK )) -ge 30 ]; then
+    echo "$NOW" > /tmp/omarchy_last_hub_check
+    python3 "$CORE_DIR/manager.py" hub-sync >/dev/null 2>&1 &
+fi
+
 INFO=$(python3 "$CORE_DIR/manager.py" status 2>/dev/null || echo '{"running":false}')
 RUNNING=$(echo "$INFO" | grep -oP '"running":\s*\K[a-z]+' || echo "false")
 SNAME=$(echo "$INFO" | grep -oP '"server_name":\s*"\K[^"]+' || echo "Server")
@@ -28,7 +36,14 @@ if [ "$RUNNING" = "true" ]; then
     HUB_URL=$(grep -oP '"hub_url":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
     CLIENT_ID=$(grep -oP '"client_id":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
     if [ -n "$HUB_URL" ] && [ -n "$CLIENT_ID" ]; then
-        curl -s -m 1 "$HUB_URL/api/v1/heartbeat?client_id=$CLIENT_ID&status=connected" >/dev/null 2>&1 || true
+        BYTES_USED=0
+        XPID=$(pgrep -f "xray.*active_config.json" | head -n 1 || true)
+        if [ -n "$XPID" ] && [ -r "/proc/$XPID/io" ]; then
+            RCHAR=$(grep -oP '^rchar:\s*\K[0-9]+' "/proc/$XPID/io" 2>/dev/null || echo 0)
+            WCHAR=$(grep -oP '^wchar:\s*\K[0-9]+' "/proc/$XPID/io" 2>/dev/null || echo 0)
+            BYTES_USED=$(( RCHAR + WCHAR ))
+        fi
+        curl -s -m 1 "$HUB_URL/api/v1/heartbeat?client_id=$CLIENT_ID&bytes_used=$BYTES_USED&status=connected" >/dev/null 2>&1 || true
     fi
     echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy ($SNAME | $DNAME): Включен\n$HUB_TXT\nЛКМ: выключить, ПКМ: настройки\",\"class\":\"active\",\"alt\":\"on\"}"
 else

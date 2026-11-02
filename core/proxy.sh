@@ -114,6 +114,14 @@ case "$1" in
         ;;
 
     stop)
+        XPID=$(pgrep -f "$BIN.*active_config.json" | head -n 1 || true)
+        BYTES_USED=0
+        if [ -n "$XPID" ] && [ -r "/proc/$XPID/io" ]; then
+            RCHAR=$(grep -oP '^rchar:\s*\K[0-9]+' "/proc/$XPID/io" 2>/dev/null || echo 0)
+            WCHAR=$(grep -oP '^wchar:\s*\K[0-9]+' "/proc/$XPID/io" 2>/dev/null || echo 0)
+            BYTES_USED=$(( RCHAR + WCHAR ))
+        fi
+
         pkill -f "$BIN.*active_config.json" 2>/dev/null || true
         for _ in {1..20}; do
             if ! is_running; then break; fi
@@ -124,11 +132,11 @@ case "$1" in
         fi
         rm -f "$PID_FILE"
 
-        # Notify Hub server that client disconnected
+        # Notify Hub server that client disconnected with final session bytes
         HUB_URL=$(grep -oP '"hub_url":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
         CLIENT_ID=$(grep -oP '"client_id":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
         if [ -n "$HUB_URL" ] && [ -n "$CLIENT_ID" ]; then
-            curl -s -m 2 "$HUB_URL/api/v1/disconnect?client_id=$CLIENT_ID" >/dev/null 2>&1 || true
+            curl -s -m 2 "$HUB_URL/api/v1/disconnect?client_id=$CLIENT_ID&bytes_used=$BYTES_USED" >/dev/null 2>&1 || true
         fi
 
         echo "🛑 Прокси остановлен."
