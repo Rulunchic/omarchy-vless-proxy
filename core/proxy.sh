@@ -69,6 +69,14 @@ case "$1" in
             INFO=$(python3 "$DIR/core/manager.py" status 2>/dev/null || echo "{}")
             SNAME=$(echo "$INFO" | grep -oP '"server_name":\s*"\K[^"]+' || echo "Default")
             DNAME=$(echo "$INFO" | grep -oP '"dns_name":\s*"\K[^"]+' || echo "Default")
+
+            # Notify Hub server that client is connected
+            HUB_URL=$(grep -oP '"hub_url":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
+            CLIENT_ID=$(grep -oP '"client_id":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
+            if [ -n "$HUB_URL" ] && [ -n "$CLIENT_ID" ]; then
+                curl -s -m 2 "$HUB_URL/api/v1/heartbeat?client_id=$CLIENT_ID&status=connected" >/dev/null 2>&1 || true
+            fi
+
             echo "✅ Прокси запущен локально (PID $X_PID):"
             echo "   - Сервер:     $SNAME"
             echo "   - DNS:        $DNAME"
@@ -115,6 +123,14 @@ case "$1" in
             pkill -9 -f "$BIN.*active_config.json" 2>/dev/null || true
         fi
         rm -f "$PID_FILE"
+
+        # Notify Hub server that client disconnected
+        HUB_URL=$(grep -oP '"hub_url":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
+        CLIENT_ID=$(grep -oP '"client_id":\s*"\K[^"]+' "$DIR/settings.json" 2>/dev/null || true)
+        if [ -n "$HUB_URL" ] && [ -n "$CLIENT_ID" ]; then
+            curl -s -m 2 "$HUB_URL/api/v1/disconnect?client_id=$CLIENT_ID" >/dev/null 2>&1 || true
+        fi
+
         echo "🛑 Прокси остановлен."
         ;;
 
