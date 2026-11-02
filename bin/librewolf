@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # Auto-route LibreWolf through local proxy when proxy is running
 export XDG_CURRENT_DESKTOP=GNOME
-EXTRA_ARGS=("--env=XDG_CURRENT_DESKTOP=GNOME")
+export LIBVA_DRIVER_NAME=nvidia
+export MOZ_DISABLE_RDD_SANDBOX=1
+export NVD_BACKEND=direct
+
+EXTRA_ARGS=(
+    "--env=XDG_CURRENT_DESKTOP=GNOME"
+    "--env=LIBVA_DRIVER_NAME=nvidia"
+    "--env=MOZ_DISABLE_RDD_SANDBOX=1"
+    "--env=NVD_BACKEND=direct"
+)
 
 if (exec 3<>/dev/tcp/127.0.0.1/10809) 2>/dev/null; then
     exec 3>&-

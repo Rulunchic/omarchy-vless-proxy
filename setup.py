@@ -161,15 +161,21 @@ def install_system_components():
             os.chmod(dst, os.stat(dst).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
             log(f"Установлен LibreWolf wrapper: {dst}")
 
-        # Set Flatpak GNOME desktop override
+        # Set Flatpak GNOME desktop & NVIDIA hardware acceleration overrides
         if shutil.which("flatpak"):
             try:
-                subprocess.run(["flatpak", "override", "--user", "--env=XDG_CURRENT_DESKTOP=GNOME", "io.gitlab.librewolf-community"],
-                               check=False, capture_output=True)
+                subprocess.run([
+                    "flatpak", "override", "--user",
+                    "--env=XDG_CURRENT_DESKTOP=GNOME",
+                    "--env=MOZ_DISABLE_RDD_SANDBOX=1",
+                    "--env=LIBVA_DRIVER_NAME=nvidia",
+                    "--env=NVD_BACKEND=direct",
+                    "io.gitlab.librewolf-community"
+                ], check=False, capture_output=True)
             except Exception:
                 pass
 
-        # Update user.js in LibreWolf profiles
+        # Update user.js in LibreWolf profiles (Proxy + Media/YouTube performance)
         lw_base = os.path.expanduser("~/.var/app/io.gitlab.librewolf-community/config/librewolf/librewolf")
         if os.path.exists(lw_base):
             for d in os.listdir(lw_base):
@@ -181,10 +187,19 @@ def install_system_components():
                         if os.path.exists(ujs):
                             with open(ujs, "r", encoding="utf-8") as f:
                                 ujs_content = f.read()
+                        additions = []
                         if "network.proxy.type" not in ujs_content:
+                            additions.append('user_pref("network.proxy.type", 5);\nuser_pref("network.proxy.socks_remote_dns", true);')
+                        if "network.http.http3.enable" not in ujs_content:
+                            additions.append('user_pref("network.http.http3.enable", false);')
+                        if "privacy.resistFingerprinting" not in ujs_content:
+                            additions.append('user_pref("privacy.resistFingerprinting", false);\nuser_pref("privacy.fingerprintingProtection", true);')
+                        if "media.ffmpeg.vaapi.enabled" not in ujs_content:
+                            additions.append('user_pref("gfx.webrender.all", true);\nuser_pref("widget.dmabuf.force-enabled", true);\nuser_pref("media.ffmpeg.vaapi.enabled", true);\nuser_pref("media.rdd-ffmpeg.enabled", true);\nuser_pref("media.hardware-video-decoding.enabled", true);\nuser_pref("media.av1.enabled", true);')
+                        if additions:
                             with open(ujs, "a", encoding="utf-8") as f:
-                                f.write("\nuser_pref(\"network.proxy.type\", 5);\nuser_pref(\"network.proxy.socks_remote_dns\", true);\n")
-                            log(f"Добавлен сетевой профиль прокси в {ujs}")
+                                f.write("\n" + "\n".join(additions) + "\n")
+                            log(f"Настроены параметры производительности и прокси в {ujs}")
                     except Exception as e:
                         log(f"Не удалось обновить {ujs}: {e}", "⚠️")
 
