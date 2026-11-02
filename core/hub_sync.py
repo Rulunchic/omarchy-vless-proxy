@@ -123,12 +123,17 @@ def sync_hub_subscription(force_renew: bool = False) -> Tuple[bool, Optional[str
 
 def check_auto_rotation() -> Tuple[bool, Optional[str]]:
     """
-    Checks if current subscription is expiring within 2 hours.
-    If so, requests a forced renewal from the Hub.
+    1. Checks with Hub for current assigned lease (detects manual rotations).
+    2. If expiring (now >= rotate_at), requests forced renewal.
     """
     settings = load_settings()
     if not settings.get("hub_url"):
         return False, None
+
+    # Check with Hub if server assigned a new subscription (e.g. manual rotation via CLI)
+    changed, new_url, exp = sync_hub_subscription(force_renew=False)
+    if changed:
+        return True, new_url
 
     exp_str = settings.get("subscription_expires_at")
     rotate_str = settings.get("rotate_at")
