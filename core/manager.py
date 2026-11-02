@@ -305,46 +305,50 @@ def open_zenity_dialog():
     dns_names_ordered = [name for did, name, _ in DNS_PROVIDERS if did == cur_dns] + \
                         [name for did, name, _ in DNS_PROVIDERS if did != cur_dns]
 
+    sub_url = settings.get("subscription_url", "")
+    exp_str = settings.get("subscription_expires_at", "")
+    hub_info = "🟢 Ссылка получена и активна (Bereg VPN)" if sub_url else "⚪ Хаб не подключен"
+    if exp_str:
+        try:
+            exp_clean = exp_str.replace("Z", "+00:00")
+            exp_dt = datetime.fromisoformat(exp_clean)
+            hub_info += f" | до {exp_dt.strftime('%d.%m %H:%M')}"
+        except Exception:
+            pass
+
     cmd = [
         "zenity",
         "--forms",
         "--title=Настройки Прокси",
-        "--text=Выберите сервер и DNS или вставьте ссылку на подписку:",
+        f"--text=Хаб: {hub_info}\nВыберите сервер и профиль DNS:",
         "--separator=|",
         "--add-combo=Сервер",
         f"--combo-values={'|'.join(server_names_ordered)}",
         "--add-combo=DNS-сервер",
         f"--combo-values={'|'.join(dns_names_ordered)}",
-        "--add-entry=🔗 Новая ссылка на подписку"
+        "--extra-button=🔄 Обновить с Хаба"
     ]
 
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True)
-        if proc.returncode != 0:
-            return
         out = proc.stdout.strip()
-        if not out:
+        if out == "🔄 Обновить с Хаба":
+            from hub_sync import sync_hub_subscription
+            changed, new_url, exp = sync_hub_subscription(force_renew=True)
+            apply_and_restart(cur_server, cur_dns)
+            subprocess.run([
+                "notify-send", "-a", "Proxy Manager",
+                "🔄 Хаб Bereg VPN",
+                f"Получена свежая ссылка!\n{new_url}"
+            ], check=False)
             return
+
+        if proc.returncode != 0 or not out:
+            return
+
         parts = out.split("|")
         selected_server_name = parts[0] if len(parts) > 0 else ""
         selected_dns_name = parts[1] if len(parts) > 1 else ""
-        new_sub_url = parts[2].strip() if len(parts) > 2 else ""
-
-        if new_sub_url:
-            try:
-                srvs = apply_subscription_url(new_sub_url)
-                subprocess.run([
-                    "notify-send", "-a", "Proxy Manager",
-                    "✅ Подписка успешно обновлена!",
-                    f"Загружено {len(srvs)} серверов.\nПодключен: {srvs[0]['name']}"
-                ], check=False)
-                return
-            except Exception as e:
-                subprocess.run([
-                    "zenity", "--error",
-                    f"--text=Ошибка при обновлении подписки:\n{e}"
-                ], check=False)
-                return
 
         target_server = cur_server
         for sid, name, _ in servers:
@@ -372,10 +376,12 @@ def open_tkinter_dialog():
         servers = load_servers()
         cur_server = settings.get("server")
         cur_dns = settings.get("dns", "system")
+        cur_sub = settings.get("subscription_url", "")
+        exp_str = settings.get("subscription_expires_at", "")
 
         root = tk.Tk()
         root.title("Настройки Прокси")
-        root.geometry("480x300")
+        root.geometry("480x280")
         root.resizable(False, False)
 
         tk.Label(root, text="Настройки прокси", font=("sans-serif", 13, "bold")).pack(pady=10)
@@ -401,27 +407,21 @@ def open_tkinter_dialog():
                 dns_combo.set(name)
         dns_combo.grid(row=1, column=1, pady=5)
 
-        tk.Label(frame, text="Подписка (URL):", anchor="w").grid(row=2, column=0, sticky="w", pady=5)
-        sub_var = tk.StringVar(value=settings.get("subscription_url", ""))
-        sub_entry = tk.Entry(frame, textvariable=sub_var, width=37)
-        sub_entry.grid(row=2, column=1, pady=5)
+        tk.Label(frame, text="Хаб Bereg:", anchor="w").grid(row=2, column=0, sticky="w", pady=5)
+        hub_status_text = "🟢 Ссылка получена и активна" if cur_sub else "⚪ Ожидание хаба..."
+        tk.Label(frame, text=hub_status_text, fg="#2e7d32" if cur_sub else "#666", font=("sans-serif", 9, "bold")).grid(row=2, column=1, sticky="w", pady=5)
 
-        def on_update_sub():
-            url = sub_var.get().strip()
-            if not url:
-                messagebox.showwarning("Внимание", "Введите URL подписки")
-                return
+        def on_sync_hub():
             try:
-                srvs = apply_subscription_url(url)
-                # Refresh server combo
-                servers_new = load_servers()
-                server_combo['values'] = [n for _, n, _ in servers_new]
-                server_combo.set(srvs[0]["name"])
-                messagebox.showinfo("Успех", f"Загружено {len(srvs)} серверов!\nАктивный: {srvs[0]['name']}")
+                from hub_sync import sync_hub_subscription
+                changed, new_url, exp = sync_hub_subscription(force_renew=True)
+                messagebox.showinfo("Успех", f"Хаб обновил ссылку:\n{new_url}")
+                root.destroy()
+                apply_and_restart(cur_server, cur_dns)
             except Exception as err:
-                messagebox.showerror("Ошибка", f"Не удалось загрузить подписку:\n{err}")
+                messagebox.showerror("Ошибка", f"Не удалось обновить с хаба:\n{err}")
 
-        btn_sub = tk.Button(frame, text="Загрузить подписку", command=on_update_sub, bg="#2196f3", fg="white")
+        btn_sub = tk.Button(frame, text="🔄 Обновить с Хаба", command=on_sync_hub, bg="#2196f3", fg="white")
         btn_sub.grid(row=3, column=1, sticky="e", pady=3)
 
         def on_save():
@@ -464,12 +464,17 @@ if __name__ == "__main__":
             st = load_settings()
             sid, sname, _ = get_server_tuple(st.get("server"))
             did, dname, _ = get_dns_tuple(st.get("dns", "system"))
+            sub_url = st.get("subscription_url", "")
             print(json.dumps({
                 "server_id": sid,
                 "server_name": sname,
                 "dns_id": did,
                 "dns_name": dname,
-                "subscription_url": st.get("subscription_url", ""),
+                "hub_url": st.get("hub_url", ""),
+                "hub_status": "found" if sub_url else "none",
+                "subscription_url": sub_url,
+                "subscription_expires_at": st.get("subscription_expires_at", ""),
+                "rotate_at": st.get("rotate_at", ""),
                 "running": is_proxy_running()
             }, ensure_ascii=False))
         elif cmd == "set":

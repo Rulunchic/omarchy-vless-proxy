@@ -96,6 +96,7 @@ def sync_hub_subscription(force_renew: bool = False) -> Tuple[bool, Optional[str
 
     new_sub_url = data["subscription_url"]
     new_expires_at = data.get("expires_at")
+    new_rotate_at = data.get("rotate_at")
     old_sub_url = settings.get("subscription_url")
 
     changed = (new_sub_url != old_sub_url)
@@ -104,6 +105,8 @@ def sync_hub_subscription(force_renew: bool = False) -> Tuple[bool, Optional[str
     settings["subscription_url"] = new_sub_url
     if new_expires_at:
         settings["subscription_expires_at"] = new_expires_at
+    if new_rotate_at:
+        settings["rotate_at"] = new_rotate_at
     save_settings(settings)
 
     if changed or not os.path.exists(SERVERS_FILE):
@@ -128,18 +131,24 @@ def check_auto_rotation() -> Tuple[bool, Optional[str]]:
         return False, None
 
     exp_str = settings.get("subscription_expires_at")
+    rotate_str = settings.get("rotate_at")
     should_renew = False
 
     if not exp_str or not settings.get("subscription_url"):
         should_renew = True
     else:
         try:
-            # Parse ISO 8601 timestamp
-            exp_clean = exp_str.replace("Z", "+00:00")
-            exp_dt = datetime.fromisoformat(exp_clean)
             now = datetime.now(timezone.utc)
-            if exp_dt - now < timedelta(hours=2):
-                should_renew = True
+            if rotate_str:
+                rot_clean = rotate_str.replace("Z", "+00:00")
+                rot_dt = datetime.fromisoformat(rot_clean)
+                if now >= rot_dt:
+                    should_renew = True
+            else:
+                exp_clean = exp_str.replace("Z", "+00:00")
+                exp_dt = datetime.fromisoformat(exp_clean)
+                if exp_dt - now < timedelta(hours=1):
+                    should_renew = True
         except Exception:
             should_renew = True
 

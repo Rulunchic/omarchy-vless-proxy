@@ -16,9 +16,16 @@ INFO=$(python3 "$CORE_DIR/manager.py" status 2>/dev/null || echo '{"running":fal
 RUNNING=$(echo "$INFO" | grep -oP '"running":\s*\K[a-z]+' || echo "false")
 SNAME=$(echo "$INFO" | grep -oP '"server_name":\s*"\K[^"]+' || echo "Server")
 DNAME=$(echo "$INFO" | grep -oP '"dns_name":\s*"\K[^"]+' || echo "DNS")
+HUB_STATUS=$(echo "$INFO" | grep -oP '"hub_status":\s*"\K[^"]+' || echo "none")
+
+if [ "$HUB_STATUS" = "found" ]; then
+    HUB_TXT="Хаб: 🟢 Ссылка найдена [Bereg VPN]"
+else
+    HUB_TXT="Хаб: ⚪ Ожидание ссылки"
+fi
 
 if [ "$RUNNING" = "true" ]; then
-    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy ($SNAME | $DNAME): Включен\nЛКМ: выключить, ПКМ: настройки\",\"class\":\"active\",\"alt\":\"on\"}"
+    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy ($SNAME | $DNAME): Включен\n$HUB_TXT\nЛКМ: выключить, ПКМ: настройки\",\"class\":\"active\",\"alt\":\"on\"}"
 else
-    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy: Выключен ($SNAME)\nЛКМ: включить, ПКМ: настройки\",\"class\":\"inactive\",\"alt\":\"off\"}"
+    echo "{\"text\":\"\uf0e7\",\"tooltip\":\"Proxy: Выключен ($SNAME)\n$HUB_TXT\nЛКМ: включить, ПКМ: настройки\",\"class\":\"inactive\",\"alt\":\"off\"}"
 fi
