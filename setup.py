@@ -115,7 +115,44 @@ def install_system_components():
                 f.write(content)
             log("Настроен chromium.desktop с поддержкой динамического прокси")
 
-    # 3b. T3 Code (CLI & GUI)
+    # 3b. LibreWolf (Flatpak / Wayland / GSettings proxy sync)
+    has_librewolf = shutil.which("librewolf") or os.path.exists(os.path.expanduser("~/.var/app/io.gitlab.librewolf-community"))
+    if has_librewolf:
+        src = os.path.join(ROOT_DIR, "bin", "librewolf")
+        dst = os.path.join(user_bin, "librewolf")
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+            os.chmod(dst, os.stat(dst).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            log(f"Установлен LibreWolf wrapper: {dst}")
+
+        # Set Flatpak GNOME desktop override
+        if shutil.which("flatpak"):
+            try:
+                subprocess.run(["flatpak", "override", "--user", "--env=XDG_CURRENT_DESKTOP=GNOME", "io.gitlab.librewolf-community"],
+                               check=False, capture_output=True)
+            except Exception:
+                pass
+
+        # Update user.js in LibreWolf profiles
+        lw_base = os.path.expanduser("~/.var/app/io.gitlab.librewolf-community/config/librewolf/librewolf")
+        if os.path.exists(lw_base):
+            for d in os.listdir(lw_base):
+                prof_path = os.path.join(lw_base, d)
+                if os.path.isdir(prof_path) and ("default" in d):
+                    ujs = os.path.join(prof_path, "user.js")
+                    try:
+                        ujs_content = ""
+                        if os.path.exists(ujs):
+                            with open(ujs, "r", encoding="utf-8") as f:
+                                ujs_content = f.read()
+                        if "network.proxy.type" not in ujs_content:
+                            with open(ujs, "a", encoding="utf-8") as f:
+                                f.write("\nuser_pref(\"network.proxy.type\", 5);\nuser_pref(\"network.proxy.socks_remote_dns\", true);\n")
+                            log(f"Добавлен сетевой профиль прокси в {ujs}")
+                    except Exception as e:
+                        log(f"Не удалось обновить {ujs}: {e}", "⚠️")
+
+    # 3c. T3 Code (CLI & GUI)
     if shutil.which("t3") or os.path.exists("/usr/bin/t3"):
         src = os.path.join(ROOT_DIR, "bin", "t3")
         dst = os.path.join(user_bin, "t3")

@@ -31,6 +31,27 @@ case "$1" in
 
         rm -f "$HOME/.config/environment.d/99-proxy.conf"
 
+        # 3. LibreWolf Flatpak GSettings keyfile sync
+        LW_KEYFILE="$HOME/.var/app/io.gitlab.librewolf-community/config/glib-2.0/settings/keyfile"
+        if [ -d "$(dirname "$LW_KEYFILE")" ]; then
+            cat <<EOF > "$LW_KEYFILE"
+[system/proxy]
+mode='manual'
+
+[system/proxy/http]
+host='127.0.0.1'
+port=10809
+
+[system/proxy/https]
+host='127.0.0.1'
+port=10809
+
+[system/proxy/socks]
+host='127.0.0.1'
+port=10808
+EOF
+        fi
+
         echo "✅ Системный прокси включен (GSettings manual + systemd):"
         echo "   HTTP:  $PROXY_HTTP"
         echo "   SOCKS: $PROXY_SOCKS"
@@ -54,6 +75,16 @@ case "$1" in
             NO_PROXY="" 2>/dev/null || true
 
         rm -f "$HOME/.config/environment.d/99-proxy.conf"
+
+        # 3. LibreWolf Flatpak GSettings keyfile sync -> direct
+        LW_KEYFILE="$HOME/.var/app/io.gitlab.librewolf-community/config/glib-2.0/settings/keyfile"
+        if [ -f "$LW_KEYFILE" ]; then
+            cat <<EOF > "$LW_KEYFILE"
+[system/proxy]
+mode='none'
+EOF
+        fi
+
         echo "🛑 Системный прокси отключен (прямое подключение к интернету)."
         ;;
 

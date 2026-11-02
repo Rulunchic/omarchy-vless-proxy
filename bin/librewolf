@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Auto-route LibreWolf through local proxy when proxy is running
+export XDG_CURRENT_DESKTOP=GNOME
+EXTRA_ARGS=("--env=XDG_CURRENT_DESKTOP=GNOME")
+
+if (exec 3<>/dev/tcp/127.0.0.1/10809) 2>/dev/null; then
+    exec 3>&-
+    export http_proxy="http://127.0.0.1:10809"
+    export https_proxy="http://127.0.0.1:10809"
+    export all_proxy="socks5h://127.0.0.1:10808"
+    export HTTP_PROXY="http://127.0.0.1:10809"
+    export HTTPS_PROXY="http://127.0.0.1:10809"
+    export ALL_PROXY="socks5h://127.0.0.1:10808"
+    EXTRA_ARGS+=(
+        "--env=http_proxy=http://127.0.0.1:10809"
+        "--env=https_proxy=http://127.0.0.1:10809"
+        "--env=all_proxy=socks5h://127.0.0.1:10808"
+        "--env=HTTP_PROXY=http://127.0.0.1:10809"
+        "--env=HTTPS_PROXY=http://127.0.0.1:10809"
+        "--env=ALL_PROXY=socks5h://127.0.0.1:10808"
+    )
+fi
+
+if command -v flatpak >/dev/null 2>&1 && flatpak info io.gitlab.librewolf-community >/dev/null 2>&1; then
+    exec flatpak run "${EXTRA_ARGS[@]}" io.gitlab.librewolf-community "$@"
+fi
+
+TARGET=$(which -a librewolf 2>/dev/null | grep -v "$0" | head -n 1)
+[ -z "$TARGET" ] && TARGET="/usr/bin/librewolf"
+exec "$TARGET" "$@"
