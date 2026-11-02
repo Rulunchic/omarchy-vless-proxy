@@ -283,21 +283,57 @@ PROMPT_COMMAND="_sync_proxy_state${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 def main():
     parser = argparse.ArgumentParser(description="Omarchy VLESS Proxy Installer")
     parser.add_argument("-s", "--subscription", help="Subscription URL or path to file", required=False)
+    parser.add_argument("--hub", help="Bereg VPN Hub URL (e.g. http://127.0.0.1:8000)", required=False)
     args = parser.parse_args()
 
     sub_input = args.subscription
-    if not sub_input:
+    hub_input = args.hub
+
+    if not sub_input and not hub_input:
         if os.path.exists(os.path.join(ROOT_DIR, "subscription.txt")):
             sub_input = os.path.join(ROOT_DIR, "subscription.txt")
         else:
-            print("Введите ссылку на подписку (VLESS, Remnawave, VMess, Trojan, BeregVPN и др.):")
-            sub_input = input("URL/Путь: ").strip()
+            print("\n==========================================")
+            print("  Модный VPN | Мастер первоначальной настройки")
+            print("==========================================")
+            print(" [1] Подключиться к нашему VPN Hub серверу (авто-ротация и авто-продление)")
+            print(" [2] Ввести ссылку на подписку вручную (Bereg, VLESS, Remnawave)")
+            choice = input("Ваш выбор [1/2, по умолчанию 1]: ").strip()
+            if choice == "2":
+                sub_input = input("URL/Путь подписки: ").strip()
+            else:
+                hub_input = input("URL Hub-сервера (по умолчанию http://127.0.0.1:8000): ").strip()
+                if not hub_input:
+                    hub_input = "http://127.0.0.1:8000"
+
+    ensure_dirs()
+
+    if hub_input:
+        log(f"Подключение к VPN Hub серверу ({hub_input})...", "🔄")
+        try:
+            from hub_sync import save_settings, sync_hub_subscription
+        except ImportError:
+            from core.hub_sync import save_settings, sync_hub_subscription
+
+        st = {}
+        if os.path.exists(SETTINGS_JSON):
+            try:
+                with open(SETTINGS_JSON, "r", encoding="utf-8") as f:
+                    st = json.load(f)
+            except Exception:
+                pass
+        st["hub_url"] = hub_input.rstrip("/")
+        save_settings(st)
+        changed, sub_url, exp = sync_hub_subscription(force_renew=True)
+        if not sub_url:
+            log("Не удалось получить ссылку от Hub сервера! Проверьте, что сервер запущен.", "❌")
+            sys.exit(1)
+        sub_input = sub_url
+        log(f"Получена подписка от Hub: {sub_url} (до {exp})", "✅")
 
     if not sub_input:
         log("Не указана ссылка на подписку. Завершение работы.", "❌")
         sys.exit(1)
-
-    ensure_dirs()
     log("Загрузка и парсинг серверов подписки...", "🔄")
     try:
         servers = update_from_subscription(sub_input, ROOT_DIR)
@@ -325,13 +361,23 @@ def main():
             def_server = s["id"]
             break
 
-    # Save settings.json
-    st = {
-        "server": def_server,
-        "dns": "system",
-        "hwid": get_hwid(ROOT_DIR),
-        "subscription_url": sub_input if sub_input.startswith("http") else ""
-    }
+    # Save settings.json (preserving hub_url and existing keys)
+    st = {}
+    if os.path.exists(SETTINGS_JSON):
+        try:
+            with open(SETTINGS_JSON, "r", encoding="utf-8") as f:
+                st = json.load(f)
+        except Exception:
+            pass
+
+    st["server"] = def_server
+    st["dns"] = st.get("dns", "system")
+    st["hwid"] = get_hwid(ROOT_DIR)
+    if sub_input.startswith("http"):
+        st["subscription_url"] = sub_input
+    if hub_input:
+        st["hub_url"] = hub_input.rstrip("/")
+
     with open(SETTINGS_JSON, "w", encoding="utf-8") as f:
         json.dump(st, f, indent=2, ensure_ascii=False)
 

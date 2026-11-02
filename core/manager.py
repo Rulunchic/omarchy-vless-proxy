@@ -115,6 +115,13 @@ def get_dns_tuple(dns_id):
     return DNS_PROVIDERS[0]
 
 def build_active_config(server_id=None, dns_id=None):
+    # Check Hub auto-rotation if configured
+    try:
+        from hub_sync import check_auto_rotation
+        changed, _ = check_auto_rotation()
+    except Exception:
+        pass
+
     settings = load_settings()
     if server_id:
         settings["server"] = server_id
@@ -496,6 +503,21 @@ if __name__ == "__main__":
             print(f"✅ Подписка обновлена ({len(srvs)} серверов):")
             for s in srvs:
                 print(f" - [{s['id']}] {s['name']} ({s['host']})")
+        elif cmd == "hub-sync":
+            from hub_sync import check_auto_rotation
+            changed, url = check_auto_rotation()
+            if changed:
+                st = load_settings()
+                apply_and_restart(st.get("server"), st.get("dns", "system"))
+                print(f"✅ Auto-rotated to fresh subscription: {url}")
+            else:
+                print(f"ℹ️ Subscription is still active: {url}")
+        elif cmd == "hub-rotate":
+            from hub_sync import sync_hub_subscription
+            changed, url, exp = sync_hub_subscription(force_renew=True)
+            print(f"🔄 Forced Hub Rotation: {url} (expires: {exp})")
+            st = load_settings()
+            apply_and_restart(st.get("server"), st.get("dns", "system"))
         elif cmd == "list":
             servers = load_servers()
             print("Доступные серверы:")
